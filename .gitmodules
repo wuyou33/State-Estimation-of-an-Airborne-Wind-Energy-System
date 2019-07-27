@@ -1,0 +1,6 @@
+[submodule "Simulationen/interestingSimulationsFromOtherGuys/adcs"]
+	path = Simulationen/interestingSimulationsFromOtherGuys/adcs
+	url = https://github.com/Murmele/adcs.git
+[submodule "Simulationen/interestingSimulationsFromOtherGuys/Attitude_Estimation"]
+	path = Simulationen/interestingSimulationsFromOtherGuys/Attitude_Estimation
+	url = https://github.com/Murmele/Attitude_Estimation
