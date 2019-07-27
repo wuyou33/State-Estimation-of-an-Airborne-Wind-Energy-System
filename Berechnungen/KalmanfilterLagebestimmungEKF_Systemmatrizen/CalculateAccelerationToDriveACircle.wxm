@@ -1,0 +1,41 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 19.03.1 ] */
+/* [wxMaxima: title   start ]
+Circle drive
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: comment start ]
+Calculate acceleration and rotation rate to drive a circle.
+Circle has a constant centrifugal force
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+time_to_rotate: 200;
+radius: 5;
+TA:time_to_rotate;
+omega: 2*%pi*1/TA;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+x: radius*cos(omega*time);
+y: radius*sin(omega*time);
+z: 0;
+
+p: matrix([x],[y],[z]);
+v: diff(p,time);
+a: diff(v,time)$
+a[3][1]: ones_time$
+a;
+v_init: -1*float(integrate(a, time, 0, TA/2 )/2);
+/* [wxMaxima: input   end   ] */
+/* [wxMaxima: answer  start ] */
+pos;
+/* [wxMaxima: answer  end   ] */
+
+
+
+/* Old versions of Maxima abort on loading files that end in a comment. */
+"Created with wxMaxima 19.03.1"$

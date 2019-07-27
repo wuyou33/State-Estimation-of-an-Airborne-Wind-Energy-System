@@ -1,0 +1,519 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 19.05.1-DevelopmentSnapshot ] */
+/* [wxMaxima: title   start ]
+Position estimation from tether angle (Dynamic model)
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: comment start ]
+Due to the mass of the tether, the tether is not a straight line and so the position calculated from the tether angle is not correct. In this file an approach to estimate the position of the kite from the tether with tether sagging considered is derived 
+
+No friction is considered in the model. Without friction, a single tether part moves periodically. The simulation of two parts does not look anymore right, but maybe it's only because no friction is available which reduces the movement.
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: comment start ]
+Source:
+    - [1] Williams2007 - Modeling and control of a kite on a variable length flexible inelastic tether
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: comment start ]
+TODO:
+    - include tether drag, because otherwise there is no damper inside
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: comment start ]
+Assumptions:
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: section start ]
+Rotation matrices
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+R_x(phi):= matrix([1,0,0],[0,cos(phi),sin(phi)],[0,-sin(phi),cos(phi)]);
+R_y(theta):= matrix([cos(theta),0,-sin(theta)],[0,1,0],[sin(theta),0,cos(theta)]);
+R_z(psi):= matrix([cos(psi),sin(psi),0],[-sin(psi),cos(psi),0],[0,0,1]);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/*R(theta, phi, l):= matrix([l*sin(theta(t))*sin(phi(t))], [l*sin(theta(t))*cos(phi(t))], [l*cos(theta(t))]);
+P_jp1: R(theta_jp1, phi_jp1, l_jp1);
+P_jp1_body: R_y(theta_jp1).R_z(phi_jp1).P_jp1;
+P_j: R(theta_j, phi_j, l_j) + P_jp1;
+r_j: R(theta_j, phi_j, l_j);
+
+r_j_dotdot: diff(r_j, t,2);*/;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+Cartesian Acceleration, Spherical Acceleration
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* constant length */
+/* komische definition in [1.], eq. 3!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+/* own definition
+rx: l*sin(theta(t))*sin(phi(t))$
+ry: l*sin(theta(t))*cos(phi(t))$
+rz: l*cos(theta(t))$ */
+rx: l(t)*cos(phi(t))*sin(theta(t))$
+ry: l(t)*sin(phi(t))$
+rz: l(t)*cos(phi(t))*cos(theta(t))$
+r: matrix([rx],[ry],[rz]); /* [1], eq.3 */
+/* cartesian acceleration to spherical acceleration */
+acc: diff(r, t, 2); /* equivalent to [1], eq. 6 */
+
+/* to check if correct */
+/*acc_source: matrix( /* [1], eq. 6 
+    [diff(l(t), t,2)*cos(phi(t))*sin(theta(t))- 2*diff(l(t),t)*diff(phi(t),t)*sin(phi(t))*sin(theta(t))+2*diff(l(t), t)*diff(theta(t), t)*cos(phi(t))*cos(theta(t))-l(t)*diff(phi(t),t)^2 * cos(phi(t))*sin(theta(t))-l(t)*diff(phi(t),t, 2)*sin(phi(t))*sin(theta(t))-2*l(t)*diff(phi(t),t)*diff(theta(t), t)*sin(phi(t))*cos(theta(t)) - l(t)*diff(theta(t),t)^2*cos(phi(t))*sin(theta(t)) +l(t)*diff(theta(t),t,2)*cos(phi(t))*cos(theta(t))],
+    [diff(l(t),t,2)*sin(phi(t))+2*diff(l(t),t)*diff(phi(t),t)*cos(phi(t))-l(t)*diff(phi(t),t)^2*sin(phi(t)) + l(t)*diff(phi(t),t,2)*cos(phi(t))],
+    [diff(l(t),t,2)*cos(phi(t))*cos(theta(t))- 2*diff(l(t),t)*diff(phi(t),t)*sin(phi(t))*cos(theta(t))- 2*diff(l(t),t)*diff(theta(t),t)*cos(phi(t))*sin(theta(t))-l(t)*diff(phi(t),t)^2*cos(phi(t))*cos(theta(t)) - l(t)*diff(phi(t),t,2)*sin(phi(t))*cos(theta(t)) + 2*l(t)*diff(theta(t),t)*diff(phi(t),t)*sin(phi(t))*sin(theta(t))- l(t)*diff(theta(t),t)^2*cos(phi(t))*cos(theta(t))-l(t)*diff(theta(t),t,2)*cos(phi(t))*sin(theta(t))])$
+test: acc-acc_source;*/
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: comment start ]
+Evaluation to check if the equations are correct
+
+it must always depend on 'diff(l(t),t,2), because acc is the acceleration difference between two points, and if the other point do not move, the acceleration must be due to the rope length change
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* the acceleration must be the same like the acceleration of the tether lenght change
+matrix(
+        [0],
+        [0],
+        ['diff(l(t),t,2)]
+    )*/
+acc_ev_theta0: ev(acc, g=9.81, m=1, 'diff(theta(t),t)=0, 'diff(theta(t),t,2) = 0, theta(t) = 0, phi(t) = 0);
+/* the first point lies on for example (0,0,0), so if the tether is horizontal, the acceleration can only be in the direction of the tether */
+acc_ev_thetaPi_2: ev(acc, g=9.81, m=1, 'diff(theta(t),t)=0, 'diff(theta(t),t,2) = 0,theta(t) = %pi/2, phi(t) = 0);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+Forces and tensions
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+r_j: ev(r, phi(t) = phi_j, theta(t) = theta_j, l(t) = l_j); /* [1] eq. 3*/
+r_j_dot2: diff(ev(r_j, phi_j = phi_j(t), theta_j = theta_j(t), l_j = l_j(t)), t,2)$ /* [1] eq. 6 */
+r_j_dot2: subst(['diff(phi_j(t),t,2) = phi_dot2, 
+                        'diff(theta_j(t),t,2) = theta_dot2, 
+                        'diff(phi_j(t),t) = phi_dot, 
+                        'diff(theta_j(t),t) = theta_dot,
+                        'diff(l_j(t),t) = l_dot, /* don't change length --> must be replaced by zero */
+                        'diff(l_j(t), t, 2) = l_dot2, /* don't change length --> must be replaced by zero */
+                        l_j(t) = l,
+                        phi_j(t) = phi,
+                        theta_j(t) = theta
+                        ], r_j_dot2);
+/* Rotate from inertia frame to body frame */
+R_i_to_b(theta, phi) := matrix([cos(theta), 0, -sin(theta)],
+                                                [-sin(theta)*sin(phi), cos(phi), -cos(theta)*sin(phi)],
+                                                [cos(phi)*sin(theta), sin(phi), cos(phi)*cos(theta)]); /* [1], eq. 7 */
+R_b_to_i(theta,phi) := transpose(R_i_to_b(theta, phi));
+
+r_j_b_dot2: trigsimp(R_i_to_b(theta, phi).r_j_dot2); /* [1], eq. 8 */
+/*r_j_b_dot2_source: matrix([l*theta_dot2*cos(phi) + 2*l_dot*theta_dot*cos(phi) - 2*l*theta_dot*phi_dot*sin(phi)],
+                                            [l*phi_dot2+l*theta_dot^2*sin(phi)*cos(phi)+2*l_dot*phi_dot],
+                                            [l_dot2-l*cos(phi)^2*theta_dot^2-l*phi_dot^2]);
+test: trigsimp(r_j_b_dot2- r_j_b_dot2_source);*/
+
+/* Test: must show in the l direction (3rd component),
+because all the movements are in l direction?*/
+trigsimp(R_i_to_b(theta_j, phi_j).r_j/l_j);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: comment start ]
+The goal is to estimate the tension of each part.
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* [1] eq. 9 */
+T(T, theta, phi):= T*transpose(R_i_to_b(theta,phi)[3]); /* 3rd component of the rotation matrix */
+/* [1] eq. 10 */
+F(Fx, Fy, Fz, T_jm1, T_j):= matrix([Fx], [Fy], [Fz]) + T_jm1 - T_j;
+
+F_j: F(Fx_j, Fy_j, Fz_j, T(T_jm1, theta_jm1, phi_jm1), T(T_j, theta_j, phi_j))$
+F_jp1: F(Fx_jp1, Fy_jp1, Fz_jp1, T(T_j, theta_j, phi_j), T(T_jp1, theta_jp1, phi_jp1))$
+r_j_dot2_inertiaF: F_j/m_j- F_jp1/m_jp1;
+/* [1] eq. 11, 12, 13:  */
+r_j_dot2_bodyF: R_i_to_b(theta_j, phi_j).r_j_dot2_inertiaF; /* [1], eq. 4,11-13 in the body frame */
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+example: only one mass, 2D
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+external_forces: [Fx_j = 0, Fy_j = 0, Fz_j = -m_j*g]; /* only gravity respected, no drag nor lift of a kite */ 
+/*r_1_dot2_body: ev(r_j_dot2_body, T_jm1=0, phi_jm1=0, theta_jm1=0);*/
+r_j_dot2_body_evF: ev(r_j_dot2_bodyF, T_jm1=0, phi_jm1=0, theta_jm1=0)$ /* conditions for the first node */
+
+/* Assumption: m_jp1 = inf, because the origin is fixed */
+/* so r_1_dot2_body = R_1_dot2_body */
+r_j_dot2_body_evF: limit(r_j_dot2_body_evF, m_jp1, inf);
+
+/* do not move in l direction, because the origin is fixed and the tether part is a straight line with defined lenght which doesn't change */
+/*r_1_dot2_body_l: r_1_dot2_body[3][1] = 0; /* l component is zero, because origin do not move */
+gl: r_j_dot2_body_evF[3][1] = 0;
+/*r_j_dot2_body_evF: r_j_dot2_body_evF = R_i_to_b(phi_j, theta_j).ev(acc, phi(t) = phi_j, theta(t) = theta_j); */
+
+/* Calculate tension */
+T_1: rhs(solve(gl, T_j)[1])$
+T_1: ev(T_1, external_forces);
+
+r_j_dot2_body_evF: trigsimp(ev(r_j_dot2_body_evF, T_j = T_1, external_forces));
+
+r_j_dot2_body2DF: ev(r_j_dot2_body_evF, phi_j=0);
+
+/* Due to the 2D assumption, the y component is always zero */
+r_j_dot2_inertiaF2D: R_b_to_i(theta_j, phi_j).r_j_dot2_body2DF;
+
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Plot acceleration in 2D to check result
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: comment start ]
+Assumptions:
+- gravity in [g]
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* acceleration in x direction must decrease first, because the x axis shows to the left side and we rotate clockwise*/
+plot2d([ev(r_j_dot2_inertiaF2D, g=9.81)[1][1],ev(r_j_dot2_inertiaF2D, g=9.81)[3][1]], [theta_j,0,%pi],[legend, "x", "z"],
+ [plot_format, gnuplot], [xlabel, "theta [rad]"], [ylabel, "acceleration [m/s^2]"],[title, "x and z component of the acceleration"])$
+
+/*Result: see figure below
+- There is no acceleration at theta=0 and pi. The mass is exactly over the fixed point or exactly under the point
+- why the x acceleration decreases? (was an error in the definition of the gravity)
+    - the x acceleration increases first, because the mass is rotated about the fixed point in clockwise direction (definition of theta)
+- at theta=90degree or pi/2~1,5rad the x component is zero and the z component has the value of 9.81m/s^2, 
+    because the tether is completely horizontal
+- The z acceleration becomes negative first, because the mass is falling down and the positive z-direction is upward
+*/
+
+
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: caption start ]
+ the curve must look like this:
+   [wxMaxima: caption end   ] */
+/* [wxMaxima: image   start ]
+png
+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
+   [wxMaxima: image   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+gl2D_x: trigsimp(ev(r_j_dot2_inertiaF2D)[1][1] = ev(acc, phi(t) = 0, theta(t) = theta_j,  diff(l(t),t) = 0, diff(l(t),t,2)=0, l(t) = l)[1][1]);
+gl2D_y: trigsimp(ev(r_j_dot2_inertiaF2D)[2][1] = ev(acc, phi(t) = 0, theta(t) = theta_j, diff(l(t),t) = 0, diff(l(t),t,2)=0, l(t) = l)[2][1]);
+gl2D_z: trigsimp(ev(r_j_dot2_inertiaF2D)[3][1] = ev(acc, phi(t) = 0, theta(t) = theta_j, diff(l(t),t) = 0, diff(l(t),t,2)=0, l(t) = l)[3][1]);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* create two nonlinear differential equations of first order */
+/*  x_1 = theta
+    x_2 = theta_dot */
+gl1:'diff(x_1, t) = x_2;
+ev(subst(['diff(theta_j,t,2) = 'diff(x_2,t), theta_j = x_1, 'diff(x_1,t) = x_2], gl2D_x), l(t)=l)$
+ev(%, l=1, g=9.81)$
+gl2: solve(%, 'diff(x_2,t))[1];
+
+x_10: %pi-0.1$ /* [rad] theta */
+x_20: 0$ /* [rad/s] theta_dot */
+t0: 0$ /* [s] start time*/
+tlast: 10$ /* [s] stop time */
+dt: 0.1$ /* [s] */
+
+/* if the values becom to high, the solver stops*/
+/* result: list of list with the results: first is the time, second= x_1, third = x_2 */
+solution: rk([rhs(gl1), rhs(gl2)], [x_1, x_2], [x_10, x_20], [t, t0, tlast, dt])$
+plot2d ([discrete,makelist([p[1],p[2]*180/%pi],p,solution)], [xlabel,"t [s]"],[ylabel,"theta [deg]"])$
+
+/* result:
+- if x_10 = x_20 = 0, the angle must not change, because it is perfectly vertically
+- if x_10 = %pi, x_20 = 0, there is an oszilatting angle change (very small). This is because of 
+the accuracy in calculating trigonometric functions. If sin(%pi) is not zero at the beginning, 
+there is an initial acceleration and so the angle changes, because no damping(Friction...) is included
+ */
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* ######################## why cos(x_1) is in the denominator(is it correct?)? #####################;;;;;;;;;;;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+rkeq;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+example: use multiple mass, 2D
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+twoDimensional: true;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+nbrElements: 1; /* number of elements */
+externalForces(i):= [Fx[i] = 0, Fy[i] = 0, Fz[i] = -m[i]*g];  /* only gravity respected, no drag nor lift of a kite */ 
+/* external force for the last element i.e. smalles number, there is the kite connected*/
+externalForcesLast(i):= [Fx[i] = 0, Fy[i] = 0, Fz[i] = -m[i]*g+ m[i]*(g+0.1)];  /* only gravity respected, no drag nor lift of a kite */ 
+
+for tetherNumber: 1 thru nbrElements do (
+    /* conditions for the rope connected to the kite */
+    r_dot2_bodyF: r_j_dot2_bodyF,
+    if tetherNumber = 1 then(
+        r_dot2_bodyF: ev(r_dot2_bodyF, T_jm1=0, phi_jm1=0, theta_jm1=0),
+        F: ev(F, T_jm1=0, phi_jm1=0, theta_jm1=0)/*,
+        display("1"),
+        display(r_dot2_bodyF)*/
+    ),
+    /*display("2"),
+    display(r_dot2_bodyF),*/
+    /* don't evaluate external forces here, because otherwise limit is wrong, because limit(m[2]*g/m[2], m[2], inf) = g and not zero! The acceleration must be zero for the element after the last one
+    /*r_dot2_bodyF: ev(r_dot2_bodyF, externalForces_j, externalForces_jp1),*/
+    /*F: ev(F, externalForces_j), /* evaluate first, because external Forces contain some variables from below*/
+    r_dot2_body_evF[tetherNumber]: ev(r_dot2_bodyF, 
+                                        T_jm1 = T[tetherNumber-1],
+                                        T_j = T[tetherNumber], 
+                                        T_jp1 = T[tetherNumber+1], 
+                                        m_jm1 = m[tetherNumber-1],
+                                        m_j = m[tetherNumber], 
+                                        m_jp1 = m[tetherNumber+1], 
+                                        phi_jm1 = phi[tetherNumber-1],
+                                        phi_j = phi[tetherNumber], 
+                                        phi_jp1 = phi[tetherNumber+1], 
+                                        theta_jm1 = phi[tetherNumber-1],
+                                        theta_j = theta[tetherNumber], 
+                                        theta_jp1 = theta[tetherNumber+1],
+                                        Fx_jm1 = Fx[tetherNumber-1],
+                                        Fx_j = Fx[tetherNumber],
+                                        Fx_jp1 = Fx[tetherNumber+1],
+                                        Fy_jm1 = Fy[tetherNumber-1],
+                                        Fy_j = Fy[tetherNumber],
+                                        Fy_jp1 = Fy[tetherNumber+1],
+                                        Fz_jm1 = Fz[tetherNumber-1],
+                                        Fz_j = Fz[tetherNumber],
+                                        Fz_jp1 = Fz[tetherNumber+1]),
+    F_ev[tetherNumber]: ev(F, 
+                                        T_jm1 = T[tetherNumber-1],
+                                        T_j = T[tetherNumber], 
+                                        T_jp1 = T[tetherNumber+1], 
+                                        m_jm1 = m[tetherNumber-1],
+                                        m_j = m[tetherNumber], 
+                                        m_jp1 = m[tetherNumber+1], 
+                                        phi_jm1 = phi[tetherNumber-1],
+                                        phi_j = phi[tetherNumber], 
+                                        phi_jp1 = phi[tetherNumber+1], 
+                                        theta_jm1 = phi[tetherNumber-1],
+                                        theta_j = theta[tetherNumber], 
+                                        theta_jp1 = theta[tetherNumber+1],
+                                        Fx_jm1 = Fx[tetherNumber-1],
+                                        Fx_j = Fx[tetherNumber],
+                                        Fx_jp1 = Fx[tetherNumber+1],
+                                        Fy_jm1 = Fy[tetherNumber-1],
+                                        Fy_j = Fy[tetherNumber],
+                                        Fy_jp1 = Fy[tetherNumber+1],
+                                        Fz_jm1 = Fz[tetherNumber-1],
+                                        Fz_j = Fz[tetherNumber],
+                                        Fz_jp1 = Fz[tetherNumber+1]),
+    
+    /* Assumption: m_jp1 = inf, for the last tetherElement, because the origin is fixed */
+    /* so r_2_dot2_body = R_2_dot2_body */
+    if tetherNumber = nbrElements then (
+        /* seems not to work in this loop */
+        r_dot2_body_evF[tetherNumber]: limit(r_dot2_body_evF[tetherNumber], m[nbrElements+1], inf),
+        r_dot2_body_evF[tetherNumber]: ev(r_dot2_body_evF[tetherNumber], externalForcesLast(tetherNumber), 
+                                                                                                                     externalForces(tetherNumber+1))
+    ) else (
+    
+        r_dot2_body_evF[tetherNumber]: ev(r_dot2_body_evF[tetherNumber], externalForces(tetherNumber), 
+                                                                                                                     externalForces(tetherNumber+1))
+   )
+)$
+
+
+
+/* Assumption: m_jp1 = inf for the last tetherElement, because the origin is fixed */
+/* so r_nbrElements_dot2_body = R_nbrElements_dot2_body */
+/* don't understand, why this doesn't work in the loop*/
+/*display("3");
+display(r_dot2_body_evF[nbrElements]);*/
+/*r_dot2_body_evF[nbrElements]: limit(r_dot2_body_evF[nbrElements], m[nbrElements+1], inf)$*/
+/*display("4");
+display(r_dot2_body_evF[nbrElements]);*/
+
+/* ########################### Gauss elimination ##########################*/
+/* 1) Forward elimination (Calculating the tensions)*/
+tensions: []$/*T[nbrElements] = Teq[nbrElements]]; /* add first tension */
+    
+for tetherNumber: nbrElements thru 1 step -1 do (
+
+    r_dot2_body_evF[tetherNumber]: trigsimp(ev(r_dot2_body_evF[tetherNumber], tensions)),
+    /*display("6"),
+    display(r_dot2_body_evF[tetherNumber]),*/
+    if twoDimensional = true then (
+        r_dot2_body_evF[tetherNumber]: ev(r_dot2_body_evF[tetherNumber], phi[1]=0, phi[2]=0)
+    ),
+    
+    r_j_b_dot2ev: r_j_b_dot2,
+    if twoDimensional = true then (
+        r_j_b_dot2ev: ev(r_j_b_dot2ev,
+                            phi=0,
+                            phi_dot = 0,
+                            phi_dot2 = 0)
+    ) else (
+        r_j_b_dot2ev: ev(r_j_b_dot2ev,
+                            phi=phi[tetherNumber],
+                            phi_dot = phi_dot[tetherNumber],
+                            phi_dot2 = phi_dot2[tetherNumber])
+    ),
+    
+     r_j_b_dot2ev: ev(r_j_b_dot2ev,  
+                            theta=theta[tetherNumber], 
+                            theta_dot = theta_dot[tetherNumber],
+                            theta_dot2 = theta_dot2[tetherNumber],
+                            l_dot = 0, /* length of the tether element doesn't change */
+                            l_dot2 = 0), /* length of the tether element doesn't change */
+    eq[tetherNumber]: r_dot2_body_evF[tetherNumber] = r_j_b_dot2ev,
+    if tetherNumber = nbrElements then (
+        /* do not move in l direction, because the origin is fixed and the tether part is a straight line with defined lenght which doesn't change */
+        eq3[tetherNumber]: r_dot2_body_evF[tetherNumber][3][1] = 0
+        /*display("5"),
+        display(eq3[tetherNumber])*/
+    ) else (
+        display("called"),
+        eq3[tetherNumber]: r_dot2_body_evF[tetherNumber][3][1] = r_j_b_dot2ev[3][1],
+        display(eq3[tetherNumber])
+    ),
+    /* calculate tension */
+    Teq[tetherNumber]:trigsimp(rhs(solve(eq3[tetherNumber], T[tetherNumber])[1])),
+    tensions: append(tensions, [T[tetherNumber] = Teq[tetherNumber]])
+)$
+kill(r_j_b_dot2ev)$
+
+/* 2) Inserting backward */
+for tetherNumber: 1 thru nbrElements do (
+    eq[tetherNumber]: ev(eq[tetherNumber], tensions)
+);
+
+
+/* Due to the 2D assumption, the y component is always zero */
+
+
+/*r_dot2_inertia2D[1]: R_b_to_i(theta[1], phi[1]).r_dot2_body2D[1];
+r_dot2_inertia2D[2]: R_b_to_i(theta[2], phi[2]).r_dot2_body2D[2];
+
+gl2D[1]: trigsimp(ev(r_dot2_inertia2D[1]) = ev(acc, phi(t) = 0, theta(t) = theta[1],  diff(l(t),t) = 0, diff(l(t),t,2)=0, l(t) = l));
+gl2D[2]: trigsimp(ev(r_dot2_inertia2D[2]) = ev(acc, phi(t) = 0, theta(t) = theta[2],  diff(l(t),t) = 0, diff(l(t),t,2)=0, l(t) = l));*/
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+counter: 4$ /* phi, phi_dot, theta, theta_dot */
+x_list: []$
+if twoDimensional then (
+        counter: 2
+)$
+
+for j: 1 thru counter do (
+    x[j]: makelist (concat (x, j, i), i, nbrElements),
+    x_list: append(x_list, x[j])
+);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* rotate back to inertial frame */
+for tetherNumber: 1 thru nbrElements do (
+    if twoDimensional then (
+        eqInertia[tetherNumber]: R_b_to_i(theta[tetherNumber], 0).eq[tetherNumber]
+    ) else
+        eqInertia[tetherNumber]: R_b_to_i(theta[tetherNumber], phi[tetherNumber]).eq[tetherNumber]
+)$
+useEq: 1; /* 1: use x component to solve differential equation, but it should work also with the others (---> testing this!!!) */
+/* variables which must be substituted */
+makelist(theta[i] = x[1][i], i, 1, nbrElements)$
+append(%, makelist(theta_dot[i] = x[2][i], i, 1, nbrElements))$
+substVariables: append(%, makelist(theta_dot2[i] = 'diff(x[2][i],t), i, 1, nbrElements));
+
+if twoDimensional then (
+    /* only one parameter(theta), so only a normal differential equation second order */    
+    for tetherNumber: 1 thru nbrElements do (
+        gl1[tetherNumber]: 'diff(x[1][tetherNumber], t) = x[2][tetherNumber],
+        temp: subst(substVariables,lhs(eqInertia[tetherNumber])[useEq][1] = rhs(eqInertia[tetherNumber])[useEq][1]),
+        gl2[tetherNumber]: solve(temp, 'diff(x[2][tetherNumber],t))[1]
+    )
+) else (
+    display("not implemented")
+)$
+kill(substVariables)$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+x_110: 0-0.5$ /* [rad] theta_1 */
+x_210: 0$ /* [rad/s] theta_dot_1 */
+x_120: 0-0.5$ /* [rad] theta_2 */
+x_220: 0$ /* [rad/s] theta_dot_2 */
+initialValuesAngles: [x_110, x_120]$
+initialValuesAngularVelocity: [x_210, x_220]$
+initialValues: join(initialValuesAngles, initialValuesAngularVelocity)$
+initialValues: firstn(initialValues, 2*nbrElements);
+
+t0: 0$ /* [s] start time*/
+tlast: 150$ /* [s] stop time */
+dt: 0.01$ /* [s] */
+
+/* set constants */
+rkeq: []$
+for tetherNumber: 1 thru nbrElements do (
+    gl1[tetherNumber]: ev(gl1[tetherNumber], g = 9.81, l = 1, makelist(m[i] = 1, i, 1, nbrElements)),
+    gl2[tetherNumber]: ev(gl2[tetherNumber], g = 9.81, l = 1, makelist(m[i] = 1, i, 1, nbrElements)),
+    rkeq: append(rkeq, [rhs(gl1[tetherNumber])], [rhs(gl2[tetherNumber])])    
+);
+/* if the values becom to high, the solver stops*/
+/* result: list of list with the results: first is the time, second= x1, third = x2 */
+solution: rk(rkeq, x_list, initialValues, [t, t0, tlast, dt])$
+plot2d ([discrete,makelist([p[1],p[2]*180/%pi],p,solution)], [xlabel,"t [s]"],[ylabel,"theta [deg]"])$
+
+/* [wxMaxima: input   end   ] */
+
+
+
+/* Old versions of Maxima abort on loading files that end in a comment. */
+"Created with wxMaxima 19.05.1-DevelopmentSnapshot"$

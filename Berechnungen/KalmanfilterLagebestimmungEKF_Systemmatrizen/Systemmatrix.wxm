@@ -1,0 +1,1253 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 19.07.0-DevelopmentSnapshot ] */
+/* [wxMaxima: title   start ]
+Calculate linearized matrices for the EKF  with euler angles
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: comment start ]
+Using the systemmatrices from the masterthesis "Sensor Fusion for an Airborne Wind Energy System"
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: comment start ]
+Matlab: KalmanFilterAttitudeEstimation
+Source: 
+    - [1]: Fundamentals of Small Unmanned Aircraft Flight (Barton)
+    - [2]: Sensor Fusion for an Airborne Wind Energy System
+    - [3]: Diebel2006 - Representing Attitude_ Euler Angles, Unit Quaternions, and Rotation Vectors (Rotationsmatrizen definitionen; anders definiert als im Skript "Einführung in die Roboterregelung")
+    - [4]: https://github.com/PX4/ecl/blob/master/EKF/matlab/scripts/Inertial%20Nav%20EKF/GenerateNavFilterEquations.m
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+load(vect);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* create a vector of a list of scalar states */
+stateToVector(state):=transpose( matrix(state));
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+Winkeldefinitionen und Umrechnungen zwischen verschiedene Frames
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+e_x: matrix([1],[0],[0]);
+e_y: matrix([0],[1],[0]);
+e_z: matrix([0],[0],[1]);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+gamma: matrix([phi],[Theta],[Psi]);
+gamma_dot : matrix([phi_dot],[Theta_dot],[Psi_dot]);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Rotation matrix to rotate vector from earth coords to body coords
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: comment start ]
+Winkel werden so definiert, dass diese vom Inertialen Koordinatensystem zum Body Koordinatensystem zeigen!
+Rotationmatrices definition from [3], eq. 14,15,16
+angle shows from the inertia coord system to the body fixed system
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+R_x: matrix([1,0,0],[0,cos(phi),sin(phi)],[0,-sin(phi),cos(phi)]);
+R_y: matrix([cos(theta),0,-sin(theta)],[0,1,0],[sin(theta),0,cos(theta)]);
+R_z: matrix([cos(psi),sin(psi),0],[-sin(psi),cos(psi),0],[0,0,1]);
+/* earth to body frame */
+/* first rotate about the body z axis, then rotate about the 
+   new body y axis, then rotate about the newer body x axis */
+Re_to_b: R_x.R_y.R_z;
+/* body to earth frame */
+Rb_to_e: transpose(Re_to_b);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Angular rates
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: comment start ]
+S: euler matrix to convert body angular rates to euler angular rates
+S_inv: convert euler angle rates to body angle rates
+S_strich: conjugate euler angle rates matrix: convert euler angle rates to inertia angle rates
+w_phi, w_theta, w_psi raw input angular rates
+b_w_(x): bias of the gyroscope
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+E_strich_xyz: addcol(e_x, R_x.e_y, R_x.R_y.e_z); /* S^-1 in Barton */
+S: trigsimp(invert(E_strich_xyz));
+E_xyz: addcol(transpose(R_z).transpose(R_y).e_x, transpose(R_z).e_y, e_z);
+E_xyz_inv: invert(E_xyz);
+/*S: matrix([1,sin(phi)*tan(theta), cos(phi)*tan(theta)],[0,cos(phi),-sin(phi)],[0, sin(phi)*sec(theta),cos(phi)*sec(theta)]);
+/* inverse will be used in the system model */
+/*S_inv: trigsimp(trigreduce(invert(ev(S,sec(theta)=1/cos(theta))))); /* ist nicht perfekt vereinfacht */
+w_b: matrix([w_phi],[w_theta],[w_psi]); /* measured angular rates in body coords including biases, without noise*/
+w_e: matrix([w_e_phi],[w_e_theta],[w_e_psi]); /* measured angular rates in body coords including biases, without noise*/
+
+/* Test: combining equations 39 and 40 must be equal to equations 41 42 */
+gamma_dot_2: trigsimp(ratsimp(invert(E_xyz))).w_e$
+w_b_2: ratsimp(E_strich_xyz.gamma_dot_2)$
+w_b_3: Re_to_b.w_e$
+difference: trigsimp(w_b_2 - w_b_3);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Integration Inertiale Winkelgeschwindigkeit und Eulerwinkelgeschwindigkeit (auf Stackexchange nachgefragt: https://math.stackexchange.com/questions/3018680/are-the-euler-angles-and-inertia-angle-the-same)
+   [wxMaxima: subsect end   ] */
+/* [wxMaxima: fold    start ] */
+/* [wxMaxima: comment start ]
+Vermutung: Inertiale Winkel = Euler Winkel (noch nicht bestätigt)
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+w_e_phi(t) := 1;
+w_e_theta(t):= 1;
+w_e_psi(t) := 1;
+
+gamma_dot_int: invert(E_xyz).transpose(matrix([w_e_phi(t),w_e_theta(t),w_e_psi(t)]));
+
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: fold    end   ] */
+
+
+/* [wxMaxima: title   start ]
+AHRS EKF
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: comment start ]
+States are:
+    - euler angles
+    - gyro bias
+Measurements are:
+    - magnetometer
+    - accelerometer
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: section start ]
+Zustandsgleichung
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+b_w: matrix([b_w_phi],[b_w_theta],[b_w_psi]); /* biases of angular rates */
+w: w_b-b_w; /* real angular rates */
+W: matrix([0,-w[3][1], w[2][1]],[w[3][1],0,-w[1][1]],[-w[2][1],w[1][1],0]);
+gamma_dot: S.w;
+b_w_dot: transpose(matrix([0,0,0]));
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: comment start ]
+Systemmatrix:
+States: phi,theta,psi,b_w_phi, b_w_theta, b_w_psi
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+x: addrow(gamma,b_w);
+x_dot: factor(trigsimp(addrow(gamma_dot,b_w_dot)))$
+x_dot: facsum(x_dot,sin(phi),cos(phi),sin(theta),cos(theta));
+/*x_dot_discrete: x_dot*TA+transpose(matrix([phi,theta,psi,b_w_phi,b_w_theta,b_w_psi]));*/;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Testplot
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: input   start ] */
+third(ev(x_dot, w_phi=1,w_theta=0,w_psi=0,theta=0,psi=0,b_w_phi=0, b_w_theta=0, b_w_psi=0));
+/*plot2d(%, [phi,0,2*%pi],
+ [plot_format, gnuplot])$*/
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Calculate derivation of system matrix
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: comment start ]
+Fehlermeldung: improper argument diff. In: ev(gdf,diff); Lösung: there was a variable named diff. rename variable diff to difference
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+scalefactors([phi,theta,psi,b_w_phi,b_w_theta,b_w_psi]);
+gdf: grad(x_dot)$
+gdf: express(gdf)$
+A_lin: ev(gdf, diff)$ /* ev evaluates the derivations */
+A_lin: addcol(first(A_lin),second(A_lin),third(A_lin),fourth(A_lin),fifth(A_lin),sixth(A_lin));
+/* [wxMaxima: input   end   ] */
+/* [wxMaxima: answer  start ] */
+:h;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:break ev 0;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:break ev;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:quit;
+/* [wxMaxima: answer  end   ] */
+
+
+/* [wxMaxima: input   start ] */
+ev(A_lin, phi=0, theta=0, psi=0, b_w_phi = 0, b_w_theta=0, b_w_psi=0, w_phi=1, w_theta=0, w_psi=0);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+Definitions
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Velocity / Gravity
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* horizontal velocity */
+v_hGPS : sqrt(v_x^2+v_y^2);
+/* translational velocity in body coords */
+v_b_ref: transpose(matrix([v_x,v_y,v_z])); /* transpose(matrix([v_hGPS,0,0])); */
+/* gravity*/
+g: transpose(matrix([0,0,+g_mps2]));
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Calculate magnetic vector
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: comment start ]
+Magnetic field must be rotated by the magnetic declination (delta_d) and magnetic inclination (delta_i), because magnetic north is not the same as geographic north.
+delta_d and delta_i can be determined with the position and databases:
+For munich:
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* magnetic field magnetic coords */
+m: transpose(matrix([1,0,0])); /* ideal, when magnetic north = geographic north */
+/*delta_d: 3.12; /*[°]*/
+/*delta_i: -64.20777; /*[°]*/
+
+delta_d_rad: delta_d*%pi/180;
+delta_i_rad: delta_i*%pi/180;
+Rmag_to_e: ev(R_z,psi=delta_d_rad).ev(R_y, theta=-delta_i_rad);
+Re_to_mag: transpose(Rmag_to_e);
+me: Rmag_to_e.m;
+
+/* calculate euler angles from magnetometer measurements(body coord)*/
+/*phi_test: 4.233*%pi/180;
+theta_test: 16.36*%pi/180;
+psi_test: 23*%pi/180;*/
+/*m_b_meas: float(ev(Re_to_b.me, phi=phi_test, theta=theta_test, psi = psi_test, delta_d = 3, delta_i =10));
+m_x: m_b_meas[1][1]$
+m_y: m_b_meas[2][1]$
+m_z: m_b_meas[3][1]$
+m_meas: matrix([m_x], [m_y], [m_z]);*/
+gl: transpose(R_y).transpose(R_x).m_meas = R_z.me;
+trigsimp(ratsimp(rhs(gl)[1][1])/ratsimp(rhs(gl)[2][1])) = a/b;
+%*denom(lhs(%));
+lhs(%) -rhs(%) = 0;
+trigsimp(%);
+solve(%, psi);
+/*ev(%, cos((%pi*delta_d)/180)=cosD, cos((%pi*delta_i)/180)=cosI, sin((%pi*delta_d)/180)=sinD, sin((%pi*delta_i)/180) = sinI);*/
+/* ...*/
+/* tan(Psi) = (cos(pi*delta_d/180)*b + sin(pi*delta_i/180)*a)/(sin(pi*delta_d/180)*b - cos(pi*delta_d/180)*a) with a=(m_measy*sin(phi)+m_measz*cos(phi))*sin(theta)+m_measx*cos(theta) and b = m_measy*cos(phi)-m_measz*sin(phi)  */
+ev(%, a = lhs(gl)[1][1], b = lhs(gl)[2][1])[1];
+ev(%, phi=0, theta=0, m_x =m_x, m_y = m_y, m_z = m_z);
+solve(float(%), psi)[1]/cos(psi);
+float(trigreduce(%)*180/%pi);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+float(atan2(54608548,128649677)*180/%pi);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsubsect start ]
+Calculate Inclination and Declination
+   [wxMaxima: subsubsect end   ] */
+/* [wxMaxima: fold    start ] */
+/* [wxMaxima: comment start ]
+Use Magnetometer output and find Inclination and Declination
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: heading5 start ]
+Magnetometer directs into the direction of the magnetic north with the x Axis
+   [wxMaxima: heading5 end   ] */
+
+/* [wxMaxima: input   start ] */
+m_meas: matrix([mx],[my],[mz]);
+gl: m_meas = Rmag_to_e.matrix([1],[0],[0]);
+gl2: lhs(gl)[3][1] = rhs(gl)[3][1];
+delta_i_est: rhs(solve(gl2, delta_i)[1]);
+gl3: lhs(gl)[1][1] = rhs(gl)[1][1];
+delta_d_est: rhs(solve(ev(gl3, delta_i = delta_i_est), delta_d)[1]);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: fold    end   ] */
+
+
+/* [wxMaxima: section start ]
+Output matrix
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+H: addrow((W.v_b_ref)+Re_to_b.g,Re_to_b.me)$
+y_hat: H;
+gdf: grad(H)$
+gdf: express(gdf)$
+H_lin: ev(gdf, diff)$ /* ev evaluates the derivations */
+H_lin: addcol(first(H_lin),second(H_lin),third(H_lin),fourth(H_lin),fifth(H_lin),sixth(H_lin));
+/* [wxMaxima: input   end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:break express1 44;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:continue;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:continue;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+z: transpose(matrix([f_b,m_b]));
+H: addrow((W.v_b_ref)-Re_to_b.g,matrix([psi]));
+gdf: grad(H)$
+abc211: first(gdf);
+H_lin: ev(express(gdf), diff)$ /* ev evaluates the derivations */
+H_lin: addcol(first(H_lin),second(H_lin),third(H_lin),fourth(H_lin),fifth(H_lin),sixth(H_lin));
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:quit;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:quit;
+/* [wxMaxima: answer  end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Plot of output matrix at different parameters
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: input   start ] */
+H_ev:ev(H, phi=0,theta=%pi/2, psi=0, b_w_phi=0, b_w_theta=0, b_w_psi=0, g_mps2=9.81,v_x=0, v_y=0,v_z=0, w_phi=0, w_theta=0, w_psi=0,delta_d=4.01,delta_i=64.20777);
+y_hat_ev: ev(y_hat, phi=0,theta=%pi/2, psi=0, b_w_phi=0, b_w_theta=0, b_w_psi=0, g_mps2=9.81,v_x=0, v_y=0,v_z=0, w_phi=0, w_theta=0, w_psi=0,delta_d=4.01,delta_i=64.20777);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+check m_b
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: input   start ] */
+float(ev(m_b:Re_to_b.me,delta_d=0,delta_i=0, phi=0,theta=0, psi=0));
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: title   start ]
+AHRS EKF (with hard iron calibration)
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: comment start ]
+The idea is to compensate the hard iron offset of the magnetometer in the filter (mag_b) [4]
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: comment start ]
+States are:
+    - euler angles
+Measurements are:
+    - magnetometer
+    - accelerometer
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: section start ]
+States
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+angles: [phi, theta, psi]$
+b_w: [b_w_phi, b_w_theta, b_w_psi];
+mag_e: [mag_e_N, mag_e_E, mag_e_D]; /* magnetic field in earth frame */
+mag_b: [mag_b_x, mag_b_y, mag_b_z]; /* magnetic field in body frame */
+x: append(angles, b_w, mag_e, mag_b);
+scalefactors(x);
+
+b_w: matrix([b_w_phi],[b_w_theta],[b_w_psi]); /* biases of angular rates */
+w: w_b-b_w; /* real angular rates */
+gamma_dot: S.w;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: comment start ]
+Systemmatrix:
+States: phi,theta,psi,b_w_phi, b_w_theta, b_w_psi
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: section start ]
+State equation
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: comment start ]
+Fehlermeldung: improper argument diff. In: ev(gdf,diff); Lösung: there was a variable named diff. rename variable diff to difference
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+x_dot: factor(trigsimp(gamma_dot))$
+x_dot: addrow(x_dot, transpose(matrix([0,0,0])))$ /* derivative of the gyro bias */
+x_dot: addrow(x_dot, transpose(matrix([0,0,0])))$ /* derivative of the magnetic field in earth frame */
+x_dot: addrow(x_dot, transpose(matrix([0,0,0])))$ /* derivative of the magnetic field in the body frame */
+x_dot: facsum(x_dot,sin(phi),cos(phi),sin(theta),cos(theta)); /* simplyfiy equation */
+
+gdf: grad(x_dot)$
+gdf: express(gdf)$
+A_lin: ev(gdf, diff)$ /* ev evaluates the derivations */
+temp: matrix()$
+for deriv in A_lin do  /* must be done, because A_lin is a matrix of matrices. Create one matrix */
+    temp: addcol(temp, deriv)$
+A_lin: temp;
+kill(temp)$
+/* [wxMaxima: input   end   ] */
+/* [wxMaxima: answer  start ] */
+:h;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:break ev 0;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:break ev;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:quit;
+/* [wxMaxima: answer  end   ] */
+
+
+/* [wxMaxima: section start ]
+Output matrix
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+y_hat: W.v_b_ref+Re_to_b.g$ /* accelerometer */
+y_hat: addrow(y_hat ,Re_to_b.stateToVector(mag_e) + stateToVector(mag_b))$ /* magnetometer */
+y_hat;
+gdf: grad(y_hat)$
+gdf: express(gdf)$
+H_lin: ev(gdf, diff)$ /* ev evaluates the derivations */
+temp: matrix()$
+for deriv in H_lin do  /* must be done, because H_lin is a matrix of matrices. Create one matrix */
+    temp: addcol(temp, deriv)$
+H_lin: temp;
+kill(temp)$
+/* [wxMaxima: input   end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:break express1 44;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:step;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:continue;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:continue;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:cont;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:resume;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+z: transpose(matrix([f_b,m_b]));
+H: addrow((W.v_b_ref)-Re_to_b.g,matrix([psi]));
+gdf: grad(H)$
+abc211: first(gdf);
+H_lin: ev(express(gdf), diff)$ /* ev evaluates the derivations */
+H_lin: addcol(first(H_lin),second(H_lin),third(H_lin),fourth(H_lin),fifth(H_lin),sixth(H_lin));
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:quit;
+/* [wxMaxima: answer  end   ] */
+/* [wxMaxima: answer  start ] */
+:quit;
+/* [wxMaxima: answer  end   ] */
+
+
+/* [wxMaxima: title   start ]
+INS EKF
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: comment start ]
+States are:
+    - euler angles
+    - position
+    - velocity
+    - gyro bias
+Measurements are:
+    - magnetometer
+    - position
+    - velocity
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+x: [];
+angles: [phi, theta, psi];
+position: [px, py, pz];
+velocity: [vx, vy, vz];
+b_w: [b_w_phi, b_w_theta, b_w_psi];
+b_a: [b_a_x, b_a_y, b_a_z];
+x: append(x, angles, position, velocity, b_w);
+scalefactors(x);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+System- and measurement equations
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: input   start ] */
+declare(a_b, nonscalar);
+a_b: matrix([a_bx],[a_by],[a_bz])$ /* measured acceleration */
+b_a: matrix([b_a_x],[b_a_y],[b_a_z])$ /* measured acceleration */
+angles_dot: S.w$
+position_dot: transpose(matrix(velocity))$
+velocity_dot: Rb_to_e.(a_b) + matrix([0],[0],[-g_mps2])$/* earth coords! */
+b_w_dot: matrix([0],[0],[0])$
+b_a_dot: matrix([0],[0],[0])$
+
+/* system equation */
+x_dot: addrow(angles_dot, position_dot, velocity_dot, b_w_dot);
+
+gdf: grad(x_dot)$
+gdf: express(gdf)$
+A_lin: ev(gdf, diff)$ /* ev evaluates the derivations */
+temp: matrix()$
+for deriv in A_lin do  /* must be done, because H_lin is a matrix of matrices. Create one matrix */
+    temp: addcol(temp, deriv)$
+A_lin: temp;
+kill(temp)$
+
+/* measurement equations */
+m_b: Re_to_b.me$
+Pz_baro: matrix([pz])$
+P_gps: matrix([px], [py], [pz])$
+P_line: matrix([px], [py], [pz])$
+V_gps: matrix([vx], [vy], [vz])$
+y_hat: addrow(m_b, Pz_baro, P_gps, P_line, V_gps);
+
+gdf: grad(y_hat)$
+gdf: express(gdf)$
+H_lin: ev(gdf, diff)$ /* ev evaluates the derivations */
+temp: matrix()$
+for deriv in H_lin do  /* must be done, because H_lin is a matrix of matrices. Create one matrix */
+    temp: addcol(temp, deriv)$
+H_lin: temp;
+kill(temp)$
+
+
+/* [wxMaxima: input   end   ] */
+
+
+
+/* Old versions of Maxima abort on loading files that end in a comment. */
+"Created with wxMaxima 19.07.0-DevelopmentSnapshot"$

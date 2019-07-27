@@ -1,0 +1,145 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 19.01.3 ] */
+/* [wxMaxima: title   start ]
+Euler angle calculation
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: section start ]
+Euler angle calculation from accelerometer and magnetometer
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: comment start ]
+Sources: 
+[1] Bieda2016 - Determinig of an object orientation in 3D space     usingdirection cosine matrix and non-stationary Kalmanfilter (page 5 ff)
+Eq: 10, 12, 17
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Rotation matrix to rotate vector from earth coords to body coord
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: comment start ]
+Winkel werden so definiert, dass diese vom Inertialen Koordinatensystem zum Body Koordinatensystem zeigen!
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+R_x: matrix([1,0,0],[0,cos(phi),sin(phi)],[0,-sin(phi),cos(phi)]);
+R_y: matrix([cos(theta),0,-sin(theta)],[0,1,0],[sin(theta),0,cos(theta)]);
+R_z: matrix([cos(psi),sin(psi),0],[-sin(psi),cos(psi),0],[0,0,1]);
+/* earth to body frame */
+/* first rotate about the body z axis, then rotate about the 
+   new body y axis, then rotate about the newer body x axis */
+Re_to_b: R_x.R_y.R_z;
+/* body to earth frame */
+Rb_to_e: transpose(Re_to_b);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Sensors
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: subsubsect start ]
+Accelerometer
+   [wxMaxima: subsubsect end   ] */
+
+
+/* [wxMaxima: input   start ] */
+ai: matrix([0],[0],[1]);
+ab: Re_to_b.ai;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsubsect start ]
+Magnetometer
+   [wxMaxima: subsubsect end   ] */
+
+
+/* [wxMaxima: input   start ] */
+me: matrix([1],[0],[0]);
+mb: Re_to_b.me;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Angles
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: input   start ] */
+phi(ay,az):= atan2(ay,az);
+theta(ax):= asin(-ax/1); 
+Psi(mx, my, mz, phi, theta):= atan2(sin(phi)*mz - cos(phi)*my, cos(theta)*mx + sin(phi)*sin(theta)*my + cos(phi)*sin(theta)*mz);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: subsect start ]
+Test
+   [wxMaxima: subsect end   ] */
+
+
+/* [wxMaxima: comment start ]
+Testing, if the formulas in the source are correct
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+phi_deg: 23;
+theta_deg: 9;
+psi_deg: 89;
+phi_val: phi_deg*%pi/180;
+theta_val: theta_deg*%pi/180;
+psi_val: psi_deg*%pi/180;
+ab_ev: float(ev(ab, phi = phi_val, theta = theta_val, psi = psi_val));
+mb_ev: float(ev(mb, phi = phi_val, theta = theta_val, psi = psi_val));
+
+phi_ev: phi(ab_ev[2][1], ab_ev[3][1])$
+theta_ev: theta(ab_ev[1][1])$
+psi_ev: Psi(mb_ev[1][1],mb_ev[2][1],mb_ev[3][1], phi_ev, theta_ev)$
+
+phi_ev_deg: float(phi_ev*180/%pi);
+theta_ev_deg: float(theta_ev*180/%pi);
+psi_ev_deg: float(psi_ev*180/%pi);
+
+/* is true so this is correct */
+if abs(phi_ev_deg-phi_deg) < 0.0001 and abs(theta_ev_deg-theta_deg) < 0.0001 and abs(psi_ev_deg-psi_deg) < 0.0001 then true else false;
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: section start ]
+Rotation matrix to euler angles
+   [wxMaxima: section end   ] */
+
+
+/* [wxMaxima: comment start ]
+sources: 
+[2] Diebel2006 - Representing Attitude: Euler Angles, Unit Quaternions, and Rotation Vectors
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+phi_deg: 23;
+theta_deg: 9;
+psi_deg: 50;
+phi_val: phi_deg*%pi/180;
+theta_val: theta_deg*%pi/180;
+psi_val: psi_deg*%pi/180;
+
+Re_to_b_ev: ev(Re_to_b, phi = phi_val, theta = theta_val, psi = psi_val)$
+phi: float(atan2(Re_to_b_ev[2][3], Re_to_b_ev[3][3])*180/%pi);
+theta: float(-asin(Re_to_b_ev[1][3])*180/%pi);
+psi: float(atan2(Re_to_b_ev[1][2], Re_to_b_ev[1][1])*180/%pi);
+
+if abs(phi_deg-phi) < 0.0001 and abs(theta_deg-theta) < 0.0001 and abs(psi_deg-psi) < 0.0001 then true else false;
+/* [wxMaxima: input   end   ] */
+
+
+
+/* Old versions of Maxima abort on loading files that end in a comment. */
+"Created with wxMaxima 19.01.3"$

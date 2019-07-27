@@ -1,0 +1,103 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 19.05.1-DevelopmentSnapshot ] */
+/* [wxMaxima: title   start ]
+Kite position estimation from line angle sensors
+   [wxMaxima: title   end   ] */
+
+
+/* [wxMaxima: comment start ]
+The tether is assumed to be a caternary curve, this comes, that the tether has it's own mass
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: comment start ]
+Assumption:
+    - two line angle sensors availabe, one at the base station, on at the kite
+    - known line length
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: comment start ]
+source:
+    - [1]: center2015 - Control Line Equations
+    - [2]: https://en.wikipedia.org/wiki/Catenary
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+angleLineAngleSensorBase: phi_b; /* line angle sensor at base station */
+angleLineAngleSensorKite: phi_k; /* line angle sensor at the kite */
+ropeLenght: l; /* length of the tether */
+
+y: C2+ a*cosh(x/a+C1); /* catenary equation */
+dydx: diff(y,x);
+
+/* at x=0 (Base station) dydx = atan(phi) */
+gl: tan(phi) = dydx;
+C1_ev: rhs(ev(solve(gl, C1), x=0)[1]);
+
+/* assumption: rope at XK has angle phi_k measured on the kite */
+dydx_XK: tan(phi_k)$
+gl2: dydx_XK = ev(dydx, x= XK);
+a_ev: rhs(solve(gl2, a)[1]);
+a_ev_simp: subst(asinh(tan(phi_k))=b, a_ev);
+
+/* length of the catenary */
+assume(XK>0)$
+length_catenary: integrate(sqrt(1+dydx^2), x, 0, XK);
+glXK: ratsimp(trigsimp(subst([a= a_ev_simp], length_catenary))) = l;
+XK_ev: rhs(solve(%, XK)[1]);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: comment start ]
+Reverse direction: from a point(x1, y1) with a specific line length, calculate phi_k, phi_b
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+load("mnewton")$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+l: 150;
+x1: 123;
+y1: 80;
+if sqrt(x1^2+y1^2) > l then display("Not valid!") else (display("fine"));
+
+/* initial values: angles, when tether is a straight line */
+phi0: atan(y1/x1);
+C10: asinh(tan(phi0))/10;
+phi_k0: phi0$
+b0: asinh(tan(phi_k0));
+
+
+ev(y1 = C2 + a*cosh(1/a*x1 + C1),C2 = -a*cosh(C1));
+gl3: ev(%, a = ev(a_ev_simp, XK = x1))$
+gl3: ev(%, x1 =x1, y1 = y1)$
+gl3: rhs(gl3) - lhs(gl3);
+gl4: ev(glXK, XK=x1, l=l)$
+gl4: rhs(gl4) - lhs(gl4);
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: comment start ]
+This nonlinear set of equation (gl3, gl4) cannot be solved algebraic,
+numerical solution must be used
+   [wxMaxima: comment end   ] */
+
+
+/* [wxMaxima: input   start ] */
+sol: mnewton([gl3, gl4], [b, C1], [b0, C10])[1]$
+bsol: rhs(sol[1]);
+C1sol: rhs(sol[2]);
+
+phiSol: atan(sinh(C1sol));
+phi_kSol: atan(sinh(bsol));
+/* [wxMaxima: input   end   ] */
+
+
+
+/* Old versions of Maxima abort on loading files that end in a comment. */
+"Created with wxMaxima 19.05.1-DevelopmentSnapshot"$
